@@ -25,33 +25,41 @@ const MooseGPTContentIntro = () => {
       { isUser: false, text: "" }, // Add a placeholder for the AI response
     ]);
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt: userInput }),
-      });
+    const response = await fetch("http://127.0.0.1:8000/openai/invoke", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ input: { user_input: userInput } }),
+    });
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch from LangServe");
+    const reader = response?.body?.getReader();
+    const decoder = new TextDecoder();
+    let aiResponse = "";
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        aiResponse += chunk;
+
+        setChatMessages((prevMessages) => {
+          const lastMessage = prevMessages[prevMessages.length - 1];
+          if (!lastMessage.isUser) {
+            return [
+              ...prevMessages.slice(0, -1),
+              { isUser: false, text: aiResponse },
+            ];
+          } else {
+            return [...prevMessages, { isUser: false, text: aiResponse }];
+          }
+        });
       }
-
-      const data = await response.json();
-      const aiResponse = data?.content;
-
-      setChatMessages((prevMessages) => {
-        return [
-          ...prevMessages.slice(0, -1),
-          { isUser: false, text: aiResponse },
-        ];
-      });
-    } catch (error) {
-      console.error("Error:", error);
-    } finally {
-      setIsLoading(false);
     }
+
+    setIsLoading(false);
   };
 
   // Function to handle clear messages

@@ -34,48 +34,19 @@ const MooseGPTContentIntro = () => {
         body: JSON.stringify({ prompt: userInput }),
       });
 
-      if (!response.body) {
-        throw new Error("No response body");
+      if (!response.ok) {
+        throw new Error("Failed to fetch from LangServe");
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let aiResponse = "";
+      const data = await response.json();
+      const aiResponse = data?.content;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-
-        chunk.split("\n").forEach((line) => {
-          if (line.trim().startsWith("data:")) {
-            const dataString = line.replace("data:", "").trim();
-            try {
-              const data = JSON.parse(dataString);
-              if (data.content) {
-                aiResponse += data.content;
-                setChatMessages((prevMessages) => {
-                  const lastMessage = prevMessages[prevMessages.length - 1];
-                  if (!lastMessage.isUser) {
-                    return [
-                      ...prevMessages.slice(0, -1),
-                      { isUser: false, text: aiResponse },
-                    ];
-                  } else {
-                    return [
-                      ...prevMessages,
-                      { isUser: false, text: aiResponse },
-                    ];
-                  }
-                });
-              }
-            } catch (error) {
-              console.error("Error parsing JSON:", error);
-            }
-          }
-        });
-      }
+      setChatMessages((prevMessages) => {
+        return [
+          ...prevMessages.slice(0, -1),
+          { isUser: false, text: aiResponse },
+        ];
+      });
     } catch (error) {
       console.error("Error:", error);
     } finally {

@@ -1,20 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import fetch from "node-fetch";
 
-interface OpenAIResponse {
-  output?: {
-    content?: string;
-  };
-  error?: string;
-}
-
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   const { prompt } = req.body;
 
-  // const response = await fetch("http://127.0.0.1:8000/openai/invoke", {
   const response = await fetch("http://127.0.0.1:8000/openai/stream", {
     method: "POST",
     headers: {
@@ -23,21 +15,24 @@ export default async function handler(
     body: JSON.stringify({ input: { topic: prompt } }),
   });
 
-  if (!response.ok) {
-    res
-      .status(response.status)
-      .json({ error: "Failed to fetch from LangServe" });
+  if (!response.body) {
+    res.status(500).send("No response body");
     return;
   }
 
-  const data: OpenAIResponse = (await response.json()) as OpenAIResponse;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
 
-  if (data && data.output && data.output.content) {
-    const content = data.output.content;
-    res.status(200).json({ content });
-  } else if (data && data.error) {
-    res.status(500).json({ error: data.error });
-  } else {
-    res.status(500).json({ error: "No content found in response" });
-  }
+  response.body.on("data", (chunk) => {
+    res.write(chunk);
+  });
+
+  response.body.on("end", () => {
+    res.end();
+  });
+
+  response.body.on("error", (err) => {
+    res.status(500).send(`Error: ${err.message}`);
+  });
 }
